@@ -17,6 +17,7 @@ import sys
 import time
 import uuid
 import threading
+import importlib.util
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -32,10 +33,28 @@ from astrbot.api.star import Context, Star, register
 from cryptography.fernet import Fernet, InvalidToken
 
 PLUGIN_DIR = Path(__file__).resolve().parent
-if str(PLUGIN_DIR) not in sys.path:
-    sys.path.insert(0, str(PLUGIN_DIR))
 
-from smart_quiz_api import QuizBot
+
+def _load_quiz_bot():
+    try:
+        from .smart_quiz_api import QuizBot as _QuizBot  # type: ignore
+
+        return _QuizBot
+    except Exception:
+        pass
+
+    smart_quiz_path = PLUGIN_DIR / "smart_quiz_api.py"
+    if not smart_quiz_path.exists():
+        raise ModuleNotFoundError("smart_quiz_api.py not found in plugin directory")
+
+    spec = importlib.util.spec_from_file_location("smart_quiz_api", smart_quiz_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["smart_quiz_api"] = module
+    spec.loader.exec_module(module)
+    return module.QuizBot
+
+
+QuizBot = _load_quiz_bot()
 
 
 BASE_DIR = Path(__file__).resolve().parent
