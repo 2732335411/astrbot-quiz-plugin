@@ -233,11 +233,11 @@ class SmartQuizPlugin(Star):
     # 消息入口
     # --------------------------
     @filter.command("答题")
-    async def on_quiz_command(self, event: AstrMessageEvent, *args, **kwargs):
+    async def on_quiz_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
         self._cleanup_tasks()
 
-        args = self._parse_args(event.message_str)
+        args = self._normalize_args(event, args, "答题")
         if not args or args[0] in {"帮助", "help", "?", "菜单"}:
             yield event.plain_result(self._help_text(event))
             return
@@ -265,41 +265,41 @@ class SmartQuizPlugin(Star):
         yield event.plain_result(self._help_text(event))
 
     @filter.command("绑定")
-    async def on_bind_command(self, event: AstrMessageEvent, *args, **kwargs):
+    async def on_bind_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
-        args = self._parse_args(event.message_str, command_name="绑定")
+        args = self._normalize_args(event, args, "绑定")
         yield event.plain_result(await self._handle_bind(event, args))
 
     @filter.command("课程")
-    async def on_courses_command(self, event: AstrMessageEvent, *args, **kwargs):
+    async def on_courses_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
         yield event.plain_result(await self._handle_courses(event))
 
     @filter.command("章节")
-    async def on_chapters_command(self, event: AstrMessageEvent, *args, **kwargs):
+    async def on_chapters_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
-        args = self._parse_args(event.message_str, command_name="章节")
+        args = self._normalize_args(event, args, "章节")
         yield event.plain_result(await self._handle_chapters(event, args))
 
     @filter.command("开始")
-    async def on_start_command(self, event: AstrMessageEvent, *args, **kwargs):
+    async def on_start_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
-        args = self._parse_args(event.message_str, command_name="开始")
+        args = self._normalize_args(event, args, "开始")
         yield event.plain_result(await self._handle_start(event, args))
 
     @filter.command("状态")
-    async def on_status_command(self, event: AstrMessageEvent, *args, **kwargs):
+    async def on_status_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
         yield event.plain_result(self._handle_status(event))
 
     @filter.command("取消")
-    async def on_cancel_command(self, event: AstrMessageEvent, *args, **kwargs):
+    async def on_cancel_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
-        args = self._parse_args(event.message_str, command_name="取消")
+        args = self._normalize_args(event, args, "取消")
         yield event.plain_result(self._handle_cancel(event, args))
 
     @filter.command("答题管理")
-    async def on_admin_command(self, event: AstrMessageEvent, *args, **kwargs):
+    async def on_admin_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
         self._cleanup_tasks()
 
@@ -310,7 +310,7 @@ class SmartQuizPlugin(Star):
             yield event.plain_result("仅管理员可用该命令。")
             return
 
-        args = self._parse_args(event.message_str, command_name="答题管理")
+        args = self._normalize_args(event, args, "答题管理")
         if not args or args[0] in {"帮助", "help", "?"}:
             yield event.plain_result(self._admin_help_text())
             return
@@ -784,6 +784,16 @@ class SmartQuizPlugin(Star):
             if first == command_name:
                 parts = parts[1:]
         return parts
+
+    def _normalize_args(self, event: AstrMessageEvent, raw_args, command_name: str) -> List[str]:
+        if raw_args is not None:
+            if isinstance(raw_args, (list, tuple)):
+                if len(raw_args) == 1 and isinstance(raw_args[0], (list, tuple)):
+                    return [str(x) for x in raw_args[0]]
+                return [str(x) for x in raw_args if x is not None]
+            if isinstance(raw_args, str):
+                return raw_args.split()
+        return self._parse_args(event.message_str, command_name)
 
     def _is_private(self, event: AstrMessageEvent) -> bool:
         try:
