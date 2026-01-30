@@ -36,25 +36,18 @@ PLUGIN_DIR = Path(__file__).resolve().parent
 
 
 def _load_quiz_bot():
-    try:
-        from .smart_quiz_api import QuizBot as _QuizBot  # type: ignore
-
-        return _QuizBot
-    except Exception:
-        pass
-
     smart_quiz_path = PLUGIN_DIR / "smart_quiz_api.py"
     if not smart_quiz_path.exists():
         raise ModuleNotFoundError("smart_quiz_api.py not found in plugin directory")
+
+    if str(PLUGIN_DIR) not in sys.path:
+        sys.path.insert(0, str(PLUGIN_DIR))
 
     spec = importlib.util.spec_from_file_location("smart_quiz_api", smart_quiz_path)
     module = importlib.util.module_from_spec(spec)
     sys.modules["smart_quiz_api"] = module
     spec.loader.exec_module(module)
     return module.QuizBot
-
-
-QuizBot = _load_quiz_bot()
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -202,6 +195,7 @@ class SmartQuizPlugin(Star):
         plugin_name = getattr(self, "name", "smart_quiz_bot")
         data_dir = _resolve_data_dir(plugin_name)
         self.bindings = BindingStore(data_dir / "bindings.json", data_dir / "secret.key")
+        self._quiz_bot_cls = None
         self._queue: asyncio.Queue[QuizTask] = asyncio.Queue()
         self._tasks: Dict[str, QuizTask] = {}
         self._workers: List[asyncio.Task] = []
@@ -877,11 +871,17 @@ class SmartQuizPlugin(Star):
                 return True
         return False
 
-    def _create_bot(self, username: str, password: str) -> QuizBot:
+    def _get_quiz_bot_cls(self):
+        if self._quiz_bot_cls is None:
+            self._quiz_bot_cls = _load_quiz_bot()
+        return self._quiz_bot_cls
+
+    def _create_bot(self, username: str, password: str):
         question_bank_path = self.config.get("question_bank_path", "question_bank.json")
         api_key = self.config.get("api_key", "bot666")
         api_endpoint = self.config.get("api_endpoint", "http://8.155.30.94:5000/api/get_answer")
-        return QuizBot(
+        quiz_cls = self._get_quiz_bot_cls()
+        return quiz_cls(
             api_key=api_key,
             username=username,
             password=password,
