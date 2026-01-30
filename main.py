@@ -237,7 +237,7 @@ class SmartQuizPlugin(Star):
         await self._ensure_workers()
         self._cleanup_tasks()
 
-        args = self._normalize_args(event, args, "答题")
+        args = self._normalize_args(event, args, kwargs, "答题")
         if not args or args[0] in {"帮助", "help", "?", "菜单"}:
             yield event.plain_result(self._help_text(event))
             return
@@ -267,7 +267,7 @@ class SmartQuizPlugin(Star):
     @filter.command("绑定")
     async def on_bind_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
-        args = self._normalize_args(event, args, "绑定")
+        args = self._normalize_args(event, args, kwargs, "绑定")
         yield event.plain_result(await self._handle_bind(event, args))
 
     @filter.command("课程")
@@ -278,13 +278,13 @@ class SmartQuizPlugin(Star):
     @filter.command("章节")
     async def on_chapters_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
-        args = self._normalize_args(event, args, "章节")
+        args = self._normalize_args(event, args, kwargs, "章节")
         yield event.plain_result(await self._handle_chapters(event, args))
 
     @filter.command("开始")
     async def on_start_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
-        args = self._normalize_args(event, args, "开始")
+        args = self._normalize_args(event, args, kwargs, "开始")
         yield event.plain_result(await self._handle_start(event, args))
 
     @filter.command("状态")
@@ -295,7 +295,7 @@ class SmartQuizPlugin(Star):
     @filter.command("取消")
     async def on_cancel_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
-        args = self._normalize_args(event, args, "取消")
+        args = self._normalize_args(event, args, kwargs, "取消")
         yield event.plain_result(self._handle_cancel(event, args))
 
     @filter.command("答题管理")
@@ -310,7 +310,7 @@ class SmartQuizPlugin(Star):
             yield event.plain_result("仅管理员可用该命令。")
             return
 
-        args = self._normalize_args(event, args, "答题管理")
+        args = self._normalize_args(event, args, kwargs, "答题管理")
         if not args or args[0] in {"帮助", "help", "?"}:
             yield event.plain_result(self._admin_help_text())
             return
@@ -785,14 +785,37 @@ class SmartQuizPlugin(Star):
                 parts = parts[1:]
         return parts
 
-    def _normalize_args(self, event: AstrMessageEvent, raw_args, command_name: str) -> List[str]:
+    def _normalize_args(
+        self, event: AstrMessageEvent, raw_args, raw_kwargs, command_name: str
+    ) -> List[str]:
+        collected = []
         if raw_args is not None:
             if isinstance(raw_args, (list, tuple)):
                 if len(raw_args) == 1 and isinstance(raw_args[0], (list, tuple)):
-                    return [str(x) for x in raw_args[0]]
-                return [str(x) for x in raw_args if x is not None]
-            if isinstance(raw_args, str):
-                return raw_args.split()
+                    collected.extend([str(x) for x in raw_args[0] if x is not None])
+                else:
+                    collected.extend([str(x) for x in raw_args if x is not None])
+            elif isinstance(raw_args, str):
+                collected.extend(raw_args.split())
+            else:
+                collected.append(str(raw_args))
+
+        if raw_kwargs is not None:
+            if isinstance(raw_kwargs, dict):
+                extra = raw_kwargs.get("args")
+                if isinstance(extra, (list, tuple)):
+                    collected.extend([str(x) for x in extra if x is not None])
+                elif isinstance(extra, str):
+                    collected.extend(extra.split())
+            elif isinstance(raw_kwargs, (list, tuple)):
+                collected.extend([str(x) for x in raw_kwargs if x is not None])
+            elif isinstance(raw_kwargs, str):
+                collected.extend(raw_kwargs.split())
+            else:
+                collected.append(str(raw_kwargs))
+
+        if collected:
+            return collected
         return self._parse_args(event.message_str, command_name)
 
     def _is_private(self, event: AstrMessageEvent) -> bool:
