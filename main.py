@@ -33,6 +33,8 @@ from astrbot.api.star import Context, Star, register
 from cryptography.fernet import Fernet, InvalidToken
 
 PLUGIN_DIR = Path(__file__).resolve().parent
+EVENT_MESSAGE_TYPE = getattr(filter, "EventMessageType", None)
+EVENT_MESSAGE_DECORATOR = getattr(filter, "event_message_type", None)
 
 
 def _load_quiz_bot():
@@ -204,6 +206,7 @@ class SmartQuizPlugin(Star):
         self._task_lock = asyncio.Lock()
         self._course_cache: Dict[str, Dict] = {}
         self._chapter_cache: Dict[str, Dict] = {}
+        self._pending_actions: Dict[str, Dict] = {}
 
     # --------------------------
     # 生命周期
@@ -236,6 +239,7 @@ class SmartQuizPlugin(Star):
     async def on_quiz_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
         self._cleanup_tasks()
+        self._cleanup_pending()
 
         args = self._normalize_args(event, args, kwargs, "答题")
         if not args or args[0] in {"帮助", "help", "?", "菜单"}:
@@ -302,6 +306,7 @@ class SmartQuizPlugin(Star):
     async def on_admin_command(self, event: AstrMessageEvent, args=None, kwargs=None):
         await self._ensure_workers()
         self._cleanup_tasks()
+        self._cleanup_pending()
 
         if not self._is_private(event):
             yield event.plain_result("管理命令仅支持私信使用。")
@@ -330,6 +335,41 @@ class SmartQuizPlugin(Star):
             return
 
         yield event.plain_result(self._admin_help_text())
+
+    if EVENT_MESSAGE_TYPE and EVENT_MESSAGE_DECORATOR:
+
+        @EVENT_MESSAGE_DECORATOR(EVENT_MESSAGE_TYPE.ALL)
+        async def on_quick_select(self, event: AstrMessageEvent):
+            text = (event.message_str or "").strip()
+            if not text:
+                return
+            if text.startswith("/"):
+                return
+            if text.split()[0] in {"答题", "绑定", "课程", "章节", "开始", "状态", "取消", "答题管理"}:
+                return
+
+            qq_id = None
+            try:
+                qq_id = event.get_sender_id()
+            except Exception:
+                return
+
+            pending = self._pending_actions.get(qq_id)
+            if not pending or pending.get("type") != "course_select":
+                return
+
+            parts = text.split()
+            if not parts or not parts[0].isdigit():
+                return
+            index = parts[0]
+            suffix = parts[1].lower() if len(parts) > 1 else ""
+            if suffix and suffix not in {"j", "章", "章节"}:
+                return
+
+            result = await self._handle_chapters(event, [index])
+            if result:
+                self._pending_actions.pop(qq_id, None)
+                yield event.plain_result(result)
 
     # --------------------------
     # 命令处理
@@ -362,6 +402,10 @@ class SmartQuizPlugin(Star):
 
         self._course_cache[event.get_sender_id()] = {
             "courses": courses,
+            "timestamp": time.time(),
+        }
+        self._pending_actions[event.get_sender_id()] = {
+            "type": "course_select",
             "timestamp": time.time(),
         }
 
@@ -410,6 +454,11 @@ class SmartQuizPlugin(Star):
             "course_name": course_name,
             "chapters": chapters,
             "timestamp": time.time(),
+        }
+        self._pending_actions[event.get_sender_id()] = {
+            "type": "chapter_select",
+            "timestamp": time.time(),
+            "course_id": course_id,
         }
 
         lines = [f"章节列表：{course_name}"]
@@ -738,6 +787,7 @@ class SmartQuizPlugin(Star):
             "/答题 开始 <模式> [参数]  （需先执行 /答题 章节）",
             "/答题 状态",
             "/答题 取消 <任务ID>",
+            "快捷：课程列表后可直接回复 “4” 或 “4 j” 查看第4门课程章节",
             "模式：全部 / 未完成 / 指定 1,3,5 / 范围 1-5",
             "群聊需管理员在配置 allow_group_ids 添加群号后使用。",
         ]
@@ -872,6 +922,17 @@ class SmartQuizPlugin(Star):
         ]
         for tid in stale_ids:
             self._tasks.pop(tid, None)
+
+    def _cleanup_pending(self) -> None:
+        expire_seconds = 5 * 60
+        now = time.time()
+        stale_ids = [
+            qq_id
+            for qq_id, info in self._pending_actions.items()
+            if now - info.get("timestamp", now) > expire_seconds
+        ]
+        for qq_id in stale_ids:
+            self._pending_actions.pop(qq_id, None)
 
     def _has_active_task(self, qq_id: str) -> bool:
         for task in self._tasks.values():
