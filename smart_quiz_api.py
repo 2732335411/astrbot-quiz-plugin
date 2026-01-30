@@ -22,6 +22,7 @@ import json
 import re
 import time
 import sys
+import httpx
 from pathlib import Path
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
@@ -178,7 +179,7 @@ class QuizBot(SanSanZhiAutoLogin):
                     continue
 
                 # 检查是否重定向到登录页
-                if "login" in response.url.lower():
+                if "login" in str(response.url).lower():
                     print(f"  [{course_name}] 需要登录，跳过")
                     continue
 
@@ -382,8 +383,6 @@ class QuizBot(SanSanZhiAutoLogin):
             return None
 
         try:
-            import requests
-
             data = {
                 "questionId": f"q_{int(time.time())}",
                 "title": question_text,
@@ -399,7 +398,7 @@ class QuizBot(SanSanZhiAutoLogin):
                 else None,
             }
 
-            response = requests.post(
+            response = httpx.post(
                 self.api_endpoint,
                 json=data,
                 headers={
@@ -407,7 +406,7 @@ class QuizBot(SanSanZhiAutoLogin):
                     "Accept": "application/json",
                     "x-api-key": self.api_key,
                 },
-                timeout=15,
+                timeout=15.0,
             )
 
             if response.status_code == 200:
@@ -436,12 +435,16 @@ class QuizBot(SanSanZhiAutoLogin):
                 print(f"  [API] HTTP {response.status_code}")
                 self.api_error_count += 1
 
-        except requests.exceptions.Timeout:
+        except httpx.TimeoutException:
             print("  [API] 请求超时")
             self.api_error_count += 1
 
-        except requests.exceptions.ConnectionError:
+        except httpx.ConnectError:
             print("  [API] 连接失败")
+            self.api_error_count += 1
+
+        except httpx.RequestError as e:
+            print(f"  [API] 网络错误: {str(e)[:30]}")
             self.api_error_count += 1
 
         except Exception as e:

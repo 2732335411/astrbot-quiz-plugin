@@ -29,7 +29,7 @@
 ### 1. 安装依赖
 
 ```bash
-pip install requests beautifulsoup4
+pip install httpx beautifulsoup4
 ```
 
 ### 2. 运行主程序
@@ -211,7 +211,7 @@ A: 有题库的课程可以离线使用，无题库的课程需要API。
 ## 技术要求
 
 - Python 3.6+
-- requests 库
+- httpx 库
 - beautifulsoup4 库
 
 ## 许可证

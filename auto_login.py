@@ -15,7 +15,7 @@
 日期：2026-01-30
 """
 
-import requests
+import httpx
 import time
 import re
 from urllib.parse import urljoin
@@ -49,7 +49,7 @@ class SanSanZhiAutoLogin:
         self.password = password or ""
 
         # ========== 会话管理 ==========
-        self.session = requests.Session()
+        self.session = httpx.Client(follow_redirects=True, timeout=10.0)
         self.login_success_url = None  # 登录成功后的跳转URL
 
         # ========== 浏览器模拟配置 ==========
@@ -85,7 +85,7 @@ class SanSanZhiAutoLogin:
         try:
             # 访问登录页面获取cookies和可能的token
             login_page_url = urljoin(self.base_url, "/index/login/index.html")
-            response = self.session.get(login_page_url, timeout=10)
+            response = self.session.get(login_page_url)
 
             if response.status_code != 200:
                 print(f"获取登录页面失败: {response.status_code}")
@@ -213,7 +213,7 @@ class SanSanZhiAutoLogin:
 
             print(f"尝试登录 - 密码格式: {password_format[:20]}...")
             response = self.session.post(
-                login_url, data=data, headers=headers, allow_redirects=False, timeout=10
+                login_url, data=data, headers=headers, follow_redirects=False
             )
 
             print(f"响应状态码: {response.status_code}")
@@ -351,7 +351,7 @@ class SanSanZhiAutoLogin:
         """
         try:
             main_url = urljoin(self.base_url, "/index/index/index.html")
-            response = self.session.get(main_url, timeout=10)
+            response = self.session.get(main_url)
 
             print(f"主页访问状态: {response.status_code}")
 

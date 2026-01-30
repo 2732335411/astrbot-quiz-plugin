@@ -49,6 +49,14 @@
       "default": false,
       "description": "（兼容项）允许所有群使用命令"
     },
+    "admin_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "管理员QQ号列表（用于管理命令鉴权）"
+    },
     "question_bank_path": {
       "type": "string",
       "default": "question_bank.json",

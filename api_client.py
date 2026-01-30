@@ -16,7 +16,7 @@ API客户端 - 搜题服务接口
 日期：2026-01-30
 """
 
-import requests
+import httpx
 import json
 import time
 
@@ -77,7 +77,7 @@ class APIClient:
                 }
 
                 # 发送POST请求
-                response = requests.post(
+                response = httpx.post(
                     "http://8.155.30.94:5000/api/get_answer",
                     json=data,
                     headers={
@@ -85,7 +85,7 @@ class APIClient:
                         "Accept": "application/json",
                         "x-api-key": self.api_key,
                     },
-                    timeout=self.timeout,
+                    timeout=float(self.timeout),
                 )
 
                 self.request_count += 1
@@ -156,15 +156,22 @@ class APIClient:
                     return None
 
             # ========== 网络异常处理 ==========
-            except requests.exceptions.Timeout:
+            except httpx.TimeoutException:
                 print(f"  [API] 超时")
                 if attempt < self.retry_count - 1:
                     time.sleep(1)
                     continue
                 return None
 
-            except requests.exceptions.ConnectionError as e:
+            except httpx.ConnectError:
                 print(f"  [API] 连接失败")
+                if attempt < self.retry_count - 1:
+                    time.sleep(1)
+                    continue
+                return None
+
+            except httpx.RequestError as e:
+                print(f"  [API] 网络错误")
                 if attempt < self.retry_count - 1:
                     time.sleep(1)
                     continue

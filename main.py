@@ -24,7 +24,6 @@ from astrbot.api import logger
 from astrbot.api.event import (
     AstrMessageEvent,
     MessageChain,
-    PermissionType,
     filter,
 )
 from astrbot.api.star import Context, Star, register
@@ -35,8 +34,17 @@ from smart_quiz_api import QuizBot
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _resolve_data_dir(plugin_name: str) -> Path:
+    try:
+        from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+        data_dir = get_astrbot_data_path() / "plugin_data" / plugin_name
+    except Exception:
+        data_dir = BASE_DIR / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
 
 
 def _now_str() -> str:
@@ -167,7 +175,9 @@ class SmartQuizPlugin(Star):
     def __init__(self, context: Context, config: Dict):
         super().__init__(context)
         self.config = config or {}
-        self.bindings = BindingStore(DATA_DIR / "bindings.json", DATA_DIR / "secret.key")
+        plugin_name = getattr(self, "name", "smart_quiz_bot")
+        data_dir = _resolve_data_dir(plugin_name)
+        self.bindings = BindingStore(data_dir / "bindings.json", data_dir / "secret.key")
         self._queue: asyncio.Queue[QuizTask] = asyncio.Queue()
         self._tasks: Dict[str, QuizTask] = {}
         self._workers: List[asyncio.Task] = []
@@ -237,13 +247,15 @@ class SmartQuizPlugin(Star):
         yield event.plain_result(self._help_text(event))
 
     @filter.command("答题管理")
-    @filter.permission_type(PermissionType.ADMIN)
     async def on_admin_command(self, event: AstrMessageEvent):
         await self._ensure_workers()
         self._cleanup_tasks()
 
         if not self._is_private(event):
             yield event.plain_result("管理命令仅支持私信使用。")
+            return
+        if not self._is_admin(event):
+            yield event.plain_result("仅管理员可用该命令。")
             return
 
         args = self._parse_args(event.message_str, command_name="答题管理")
@@ -650,7 +662,7 @@ class SmartQuizPlugin(Star):
             "模式：全部 / 未完成 / 指定 1,3,5 / 范围 1-5",
             "群聊需管理员在配置 allow_group_ids 添加群号后使用。",
         ]
-        if self._is_private(event) and self._is_admin_hint(event):
+        if self._is_private(event) and self._is_admin(event):
             lines.append("管理员命令：/答题管理")
         return "\n".join(lines)
 
@@ -714,11 +726,29 @@ class SmartQuizPlugin(Star):
             return True
         return bool(self.config.get("allow_group_commands", False))
 
-    def _is_admin_hint(self, event: AstrMessageEvent) -> bool:
+    def _is_admin(self, event: AstrMessageEvent) -> bool:
+        sender_id = None
         try:
-            return getattr(event, "permission_type", None) == PermissionType.ADMIN
+            sender_id = event.get_sender_id()
         except Exception:
-            return False
+            sender_id = None
+        if sender_id:
+            admin_ids = self.config.get("admin_ids", []) or []
+            if str(sender_id) in {str(x) for x in admin_ids}:
+                return True
+        try:
+            admins = getattr(self.context, "admins", None)
+            if admins and sender_id in admins:
+                return True
+        except Exception:
+            pass
+        try:
+            role = getattr(event.message_obj, "sender_role", None)
+            if role in {"admin", "owner"}:
+                return True
+        except Exception:
+            pass
+        return False
 
     def _cleanup_tasks(self) -> None:
         expire_seconds = 24 * 3600
