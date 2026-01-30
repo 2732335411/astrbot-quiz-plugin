@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import time
 import uuid
 import threading
@@ -29,6 +30,10 @@ from astrbot.api.event import (
 from astrbot.api.star import Context, Star, register
 
 from cryptography.fernet import Fernet, InvalidToken
+
+PLUGIN_DIR = Path(__file__).resolve().parent
+if str(PLUGIN_DIR) not in sys.path:
+    sys.path.insert(0, str(PLUGIN_DIR))
 
 from smart_quiz_api import QuizBot
 
