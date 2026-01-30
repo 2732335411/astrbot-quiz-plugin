@@ -186,7 +186,7 @@ class BindingStore:
     "smart_quiz_bot",
     "AI Assistant",
     "面向QQ用户的智能答题插件（AstrBot）",
-    "1.0.0",
+    "1.0.1",
 )
 class SmartQuizPlugin(Star):
     def __init__(self, context: Context, config: Dict):
@@ -659,6 +659,7 @@ class SmartQuizPlugin(Star):
         skipped_count = 0
         submit_failed = 0
         invalid_count = 0
+        failure_examples = []
         stopped_reason = None
         canceled = False
 
@@ -685,12 +686,20 @@ class SmartQuizPlugin(Star):
                 success_count += 1
             else:
                 fail_count += 1
+                if report.get("message") and len(failure_examples) < 3:
+                    failure_examples.append(f"{ch['name']}: {report.get('message')}")
                 if report.get("http_status") and report.get("http_status") != 200:
                     submit_failed += 1
                 if report.get("status") == "insufficient_answers":
                     stopped_reason = report.get("message")
                     if strict_mode:
                         break
+
+        if not stopped_reason and fail_count > 0:
+            if failure_examples:
+                stopped_reason = "章节失败：" + "；".join(failure_examples)
+            else:
+                stopped_reason = f"有 {fail_count} 个章节失败"
 
         summary = {
             "success": success_count,
