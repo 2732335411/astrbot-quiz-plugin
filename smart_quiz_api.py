@@ -615,6 +615,10 @@ class QuizBot(SanSanZhiAutoLogin):
                 return False
 
             answer_data = {}
+            answer_pairs = []
+            has_multi = False
+            answer_pairs = []
+            has_multi = False
             local_count = 0
             api_count = 0
             failed_count = 0
@@ -627,9 +631,11 @@ class QuizBot(SanSanZhiAutoLogin):
                 question_text = title_li.get_text(strip=True)
 
                 options = []
+                input_type = "radio"
                 for li in q_ul.find_all("li", class_="question_info"):
                     input_tag = li.find("input", type=["radio", "checkbox"])
                     if input_tag:
+                        input_type = input_tag.get("type", "radio")
                         options.append(
                             {
                                 "text": li.get_text(strip=True),
@@ -644,11 +650,21 @@ class QuizBot(SanSanZhiAutoLogin):
                 )
 
                 if answer:
+                    mapped_values = self._map_answer_to_values(answer, options)
+                    if not mapped_values:
+                        print(" -> 无效答案")
+                        failed_count += 1
+                        continue
                     input_tag = q_ul.find("input", type=["radio", "checkbox"])
                     if input_tag:
                         input_name = input_tag.get("name", "")
                         if input_name:
-                            answer_data[input_name] = answer
+                            if input_type == "checkbox":
+                                has_multi = True
+                                for value in mapped_values:
+                                    answer_pairs.append((input_name, value))
+                            else:
+                                answer_data[input_name] = mapped_values[0]
                             if self.is_answer_in_local_bank(question_text):
                                 local_count += 1
                             else:
@@ -673,7 +689,14 @@ class QuizBot(SanSanZhiAutoLogin):
                 return False
 
             print("[提交] 正在提交...")
-            response = self.session.post(submit_url, data=answer_data, timeout=10)
+            if has_multi:
+                for key, value in answer_data.items():
+                    answer_pairs.append((key, value))
+                payload = answer_pairs
+            else:
+                payload = answer_data
+
+            response = self.session.post(submit_url, data=payload, timeout=10)
 
             if response.status_code == 200:
                 print("[成功] 提交成功!")
@@ -741,8 +764,11 @@ class QuizBot(SanSanZhiAutoLogin):
                 "local": 0,
                 "api": 0,
                 "missing": 0,
+                "invalid": 0,
             },
             "missing_samples": [],
+            "submitted": False,
+            "http_status": None,
         }
 
         try:
@@ -780,9 +806,11 @@ class QuizBot(SanSanZhiAutoLogin):
                 question_text = title_li.get_text(strip=True)
 
                 options = []
+                input_type = "radio"
                 for li in q_ul.find_all("li", class_="question_info"):
                     input_tag = li.find("input", type=["radio", "checkbox"])
                     if input_tag:
+                        input_type = input_tag.get("type", "radio")
                         options.append(
                             {
                                 "text": li.get_text(strip=True),
@@ -797,11 +825,23 @@ class QuizBot(SanSanZhiAutoLogin):
                 )
 
                 if answer:
+                    mapped_values = self._map_answer_to_values(answer, options)
+                    if not mapped_values:
+                        report["stats"]["invalid"] += 1
+                        failed_count += 1
+                        if len(report["missing_samples"]) < 5:
+                            report["missing_samples"].append(question_text[:60])
+                        continue
                     input_tag = q_ul.find("input", type=["radio", "checkbox"])
                     if input_tag:
                         input_name = input_tag.get("name", "")
                         if input_name:
-                            answer_data[input_name] = answer
+                            if input_type == "checkbox":
+                                has_multi = True
+                                for value in mapped_values:
+                                    answer_pairs.append((input_name, value))
+                            else:
+                                answer_data[input_name] = mapped_values[0]
                             report["stats"]["answered"] += 1
                             if self.is_answer_in_local_bank(question_text):
                                 local_count += 1
@@ -840,11 +880,20 @@ class QuizBot(SanSanZhiAutoLogin):
                 report["message"] = "未生成任何答案"
                 return report
 
-            response = self.session.post(submit_url, data=answer_data, timeout=10)
+            if has_multi:
+                for key, value in answer_data.items():
+                    answer_pairs.append((key, value))
+                payload = answer_pairs
+            else:
+                payload = answer_data
+
+            response = self.session.post(submit_url, data=payload, timeout=10)
+            report["http_status"] = response.status_code
             if response.status_code == 200:
                 report["status"] = "submitted"
                 report["message"] = "提交成功"
                 report["success"] = True
+                report["submitted"] = True
                 self.completed_chapters_loaded = False
                 return report
 
@@ -854,6 +903,58 @@ class QuizBot(SanSanZhiAutoLogin):
         except Exception as e:
             report["message"] = f"答题异常: {e}"
             return report
+
+    def _map_answer_to_values(self, answer, options):
+        """
+        将答案映射为选项value列表，支持多选
+        """
+        if not answer:
+            return []
+        normalized = self._normalize_answer(answer)
+        if not normalized:
+            return []
+
+        value_set = {opt.get("value", "") for opt in options if opt.get("value")}
+        letter_to_value = {}
+        for opt in options:
+            text = opt.get("text", "")
+            value = opt.get("value", "")
+            letter = self._extract_option_letter(text)
+            if letter and value:
+                letter_to_value[letter] = value
+            elif value and self._is_letter(value):
+                letter_to_value[value] = value
+
+        mapped = []
+        for ch in normalized:
+            if ch in value_set:
+                mapped.append(ch)
+            elif ch in letter_to_value:
+                mapped.append(letter_to_value[ch])
+            else:
+                return []
+        return mapped
+
+    def _normalize_answer(self, answer):
+        text = str(answer).strip().upper()
+        if not text:
+            return ""
+        text = re.sub(r"[^A-Z]", "", text)
+        return text
+
+    def _extract_option_letter(self, text):
+        if not text:
+            return ""
+        match = re.match(r"\s*([A-Z])[\.\、\)]", text.upper())
+        if match:
+            return match.group(1)
+        match = re.match(r"\s*([A-Z])\s", text.upper())
+        if match:
+            return match.group(1)
+        return ""
+
+    def _is_letter(self, value):
+        return isinstance(value, str) and len(value) == 1 and value.isalpha()
 
     # ============================================================================
     # 主运行方法

@@ -23,7 +23,6 @@ from typing import Dict, List, Optional, Tuple
 from astrbot.api import logger
 from astrbot.api.event import (
     AstrMessageEvent,
-    EventMessageType,
     MessageChain,
     PermissionType,
     filter,
@@ -239,10 +238,13 @@ class SmartQuizPlugin(Star):
 
     @filter.command("答题管理")
     @filter.permission_type(PermissionType.ADMIN)
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
     async def on_admin_command(self, event: AstrMessageEvent):
         await self._ensure_workers()
         self._cleanup_tasks()
+
+        if not self._is_private(event):
+            yield event.plain_result("管理命令仅支持私信使用。")
+            return
 
         args = self._parse_args(event.message_str, command_name="答题管理")
         if not args or args[0] in {"帮助", "help", "?"}:
@@ -581,6 +583,8 @@ class SmartQuizPlugin(Star):
         success_count = 0
         fail_count = 0
         skipped_count = 0
+        submit_failed = 0
+        invalid_count = 0
         stopped_reason = None
         canceled = False
 
@@ -599,12 +603,16 @@ class SmartQuizPlugin(Star):
                 min_answer_rate=min_rate,
             )
 
-            skipped_count += int(report.get("stats", {}).get("missing", 0))
+            stats = report.get("stats", {}) or {}
+            skipped_count += int(stats.get("missing", 0))
+            invalid_count += int(stats.get("invalid", 0))
 
             if report["success"]:
                 success_count += 1
             else:
                 fail_count += 1
+                if report.get("http_status") and report.get("http_status") != 200:
+                    submit_failed += 1
                 if report.get("status") == "insufficient_answers":
                     stopped_reason = report.get("message")
                     if strict_mode:
@@ -615,6 +623,8 @@ class SmartQuizPlugin(Star):
             "failed": fail_count,
             "total": success_count + fail_count,
             "skipped": skipped_count,
+            "invalid": invalid_count,
+            "submit_failed": submit_failed,
             "stopped": stopped_reason,
         }
 
@@ -651,10 +661,19 @@ class SmartQuizPlugin(Star):
             return f"任务失败：{task.task_id}\n原因：{task.error or '未知错误'}"
         summary = task.summary or {}
         skipped = summary.get("skipped", 0)
-        skipped_text = f" 跳过: {skipped}" if skipped else ""
+        invalid = summary.get("invalid", 0)
+        submit_failed = summary.get("submit_failed", 0)
+        extra_parts = []
+        if skipped:
+            extra_parts.append(f"跳过: {skipped}")
+        if invalid:
+            extra_parts.append(f"异常选项: {invalid}")
+        if submit_failed:
+            extra_parts.append(f"提交失败: {submit_failed}")
+        extra_text = f" {' | '.join(extra_parts)}" if extra_parts else ""
         return (
             f"任务完成：{task.task_id}\n"
-            f"成功: {summary.get('success', 0)} 失败: {summary.get('failed', 0)} 总计: {summary.get('total', 0)}{skipped_text}\n"
+            f"成功: {summary.get('success', 0)} 失败: {summary.get('failed', 0)} 总计: {summary.get('total', 0)}{extra_text}\n"
             f"停止原因: {summary.get('stopped') or '无'}"
         )
 
