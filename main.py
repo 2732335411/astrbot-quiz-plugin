@@ -264,6 +264,40 @@ class SmartQuizPlugin(Star):
 
         yield event.plain_result(self._help_text(event))
 
+    @filter.command("绑定")
+    async def on_bind_command(self, event: AstrMessageEvent):
+        await self._ensure_workers()
+        args = self._parse_args(event.message_str, command_name="绑定")
+        yield event.plain_result(await self._handle_bind(event, args))
+
+    @filter.command("课程")
+    async def on_courses_command(self, event: AstrMessageEvent):
+        await self._ensure_workers()
+        yield event.plain_result(await self._handle_courses(event))
+
+    @filter.command("章节")
+    async def on_chapters_command(self, event: AstrMessageEvent):
+        await self._ensure_workers()
+        args = self._parse_args(event.message_str, command_name="章节")
+        yield event.plain_result(await self._handle_chapters(event, args))
+
+    @filter.command("开始")
+    async def on_start_command(self, event: AstrMessageEvent):
+        await self._ensure_workers()
+        args = self._parse_args(event.message_str, command_name="开始")
+        yield event.plain_result(await self._handle_start(event, args))
+
+    @filter.command("状态")
+    async def on_status_command(self, event: AstrMessageEvent):
+        await self._ensure_workers()
+        yield event.plain_result(self._handle_status(event))
+
+    @filter.command("取消")
+    async def on_cancel_command(self, event: AstrMessageEvent):
+        await self._ensure_workers()
+        args = self._parse_args(event.message_str, command_name="取消")
+        yield event.plain_result(self._handle_cancel(event, args))
+
     @filter.command("答题管理")
     async def on_admin_command(self, event: AstrMessageEvent):
         await self._ensure_workers()
@@ -373,6 +407,7 @@ class SmartQuizPlugin(Star):
 
         self._chapter_cache[event.get_sender_id()] = {
             "course_id": course_id,
+            "course_name": course_name,
             "chapters": chapters,
             "timestamp": time.time(),
         }
@@ -392,16 +427,25 @@ class SmartQuizPlugin(Star):
         if not self._allow_group_commands(event):
             return "请私信使用此命令，或由管理员在插件配置 allow_group_ids 中添加当前群号。"
         if not args:
-            return "用法：/答题 开始 <课程序号或课程ID> <模式> [参数]"
+            return "用法：/答题 开始 <课程序号或课程ID> <模式> [参数]，或 /答题 开始 <模式> [参数]"
 
-        try:
-            course_id, course_name = await self._resolve_course(
-                event.get_sender_id(), args[0], binding
-            )
-        except Exception as e:
-            return f"课程解析失败：{e}"
+        course_token = args[0]
+        if not course_token.isdigit() and self._is_mode_token(course_token):
+            cached = self._chapter_cache.get(event.get_sender_id())
+            if not cached:
+                return "请先使用 /答题 章节 <课程序号或课程ID> 获取章节列表"
+            course_id = cached.get("course_id")
+            course_name = cached.get("course_name") or "已选课程"
+            mode, spec = self._parse_mode(args)
+        else:
+            try:
+                course_id, course_name = await self._resolve_course(
+                    event.get_sender_id(), course_token, binding
+                )
+            except Exception as e:
+                return f"课程解析失败：{e}"
 
-        mode, spec = self._parse_mode(args[1:])
+            mode, spec = self._parse_mode(args[1:])
 
         if mode in {"指定", "范围"} and not spec:
             return "请提供章节参数，例如：/答题 开始 1 指定 1,3,5 或 /答题 开始 1 范围 1-5"
@@ -671,10 +715,18 @@ class SmartQuizPlugin(Star):
     def _help_text(self, event: AstrMessageEvent) -> str:
         lines = [
             "智能答题指令：",
+            "/绑定 <用户名> <密码>  （仅私信）",
+            "/课程",
+            "/章节 <课程序号或课程ID>",
+            "/开始 <课程序号或课程ID> <模式> [参数]",
+            "/开始 <模式> [参数]  （需先执行 /章节）",
+            "/状态",
+            "/取消 <任务ID>",
             "/答题 绑定 <用户名> <密码>  （仅私信）",
             "/答题 课程",
             "/答题 章节 <课程序号或课程ID>",
             "/答题 开始 <课程序号或课程ID> <模式> [参数]",
+            "/答题 开始 <模式> [参数]  （需先执行 /答题 章节）",
             "/答题 状态",
             "/答题 取消 <任务ID>",
             "模式：全部 / 未完成 / 指定 1,3,5 / 范围 1-5",
@@ -803,6 +855,13 @@ class SmartQuizPlugin(Star):
         if "-" in mode:
             return "范围", mode
         return "未完成", " ".join(args).strip()
+
+    def _is_mode_token(self, token: str) -> bool:
+        if token in {"全部", "所有", "全", "未完成", "未答", "未做", "指定", "选择", "选", "范围", "区间"}:
+            return True
+        if "," in token or "-" in token:
+            return True
+        return False
 
     def _parse_index_list(self, text: str) -> List[int]:
         result = []
