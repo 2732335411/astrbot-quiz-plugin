@@ -1,66 +1,52 @@
 {
-  "title": "智能答题插件配置",
-  "type": "object",
-  "properties": {
-    "api_key": {
-      "type": "string",
-      "default": "bot666",
-      "description": "搜题API密钥"
-    },
-    "api_endpoint": {
-      "type": "string",
-      "default": "http://8.155.30.94:5000/api/get_answer",
-      "description": "搜题API端点"
-    },
-    "max_concurrency": {
-      "type": "integer",
-      "default": 3,
-      "minimum": 1,
-      "maximum": 3,
-      "description": "最大并发任务数（最多3）"
-    },
-    "strict_mode": {
-      "type": "boolean",
-      "default": false,
-      "description": "严格模式：存在未识别题目时不提交"
-    },
-    "auto_submit": {
-      "type": "boolean",
-      "default": true,
-      "description": "是否自动提交答案"
-    },
-    "min_answer_rate": {
-      "type": "number",
-      "default": 0.0,
-      "minimum": 0,
-      "maximum": 1,
-      "description": "最低答题覆盖率"
-    },
-    "allow_group_ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "default": [],
-      "description": "允许使用命令的群号列表"
-    },
-    "allow_group_commands": {
-      "type": "boolean",
-      "default": false,
-      "description": "（兼容项）允许所有群使用命令"
-    },
-    "admin_ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "default": [],
-      "description": "管理员QQ号列表（用于管理命令鉴权）"
-    },
-    "question_bank_path": {
-      "type": "string",
-      "default": "question_bank.json",
-      "description": "本地题库文件路径（相对插件目录）"
-    }
+  "api_key": {
+    "type": "string",
+    "default": "bot666",
+    "description": "搜题API密钥"
+  },
+  "api_endpoint": {
+    "type": "string",
+    "default": "http://8.155.30.94:5000/api/get_answer",
+    "description": "搜题API端点"
+  },
+  "max_concurrency": {
+    "type": "int",
+    "default": 3,
+    "description": "最大并发任务数（最多3）"
+  },
+  "strict_mode": {
+    "type": "bool",
+    "default": false,
+    "description": "严格模式：存在未识别题目时不提交"
+  },
+  "auto_submit": {
+    "type": "bool",
+    "default": true,
+    "description": "是否自动提交答案"
+  },
+  "min_answer_rate": {
+    "type": "float",
+    "default": 0.0,
+    "description": "最低答题覆盖率"
+  },
+  "allow_group_ids": {
+    "type": "list",
+    "default": [],
+    "description": "允许使用命令的群号列表"
+  },
+  "allow_group_commands": {
+    "type": "bool",
+    "default": false,
+    "description": "（兼容项）允许所有群使用命令"
+  },
+  "admin_ids": {
+    "type": "list",
+    "default": [],
+    "description": "管理员QQ号列表（用于管理命令鉴权）"
+  },
+  "question_bank_path": {
+    "type": "string",
+    "default": "question_bank.json",
+    "description": "本地题库文件路径（相对插件目录）"
   }
 }
