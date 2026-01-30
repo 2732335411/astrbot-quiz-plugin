@@ -233,7 +233,7 @@ class SmartQuizPlugin(Star):
     # 消息入口
     # --------------------------
     @filter.command("答题")
-    async def on_quiz_command(self, event: AstrMessageEvent):
+    async def on_quiz_command(self, event: AstrMessageEvent, *args, **kwargs):
         await self._ensure_workers()
         self._cleanup_tasks()
 
@@ -265,41 +265,41 @@ class SmartQuizPlugin(Star):
         yield event.plain_result(self._help_text(event))
 
     @filter.command("绑定")
-    async def on_bind_command(self, event: AstrMessageEvent):
+    async def on_bind_command(self, event: AstrMessageEvent, *args, **kwargs):
         await self._ensure_workers()
         args = self._parse_args(event.message_str, command_name="绑定")
         yield event.plain_result(await self._handle_bind(event, args))
 
     @filter.command("课程")
-    async def on_courses_command(self, event: AstrMessageEvent):
+    async def on_courses_command(self, event: AstrMessageEvent, *args, **kwargs):
         await self._ensure_workers()
         yield event.plain_result(await self._handle_courses(event))
 
     @filter.command("章节")
-    async def on_chapters_command(self, event: AstrMessageEvent):
+    async def on_chapters_command(self, event: AstrMessageEvent, *args, **kwargs):
         await self._ensure_workers()
         args = self._parse_args(event.message_str, command_name="章节")
         yield event.plain_result(await self._handle_chapters(event, args))
 
     @filter.command("开始")
-    async def on_start_command(self, event: AstrMessageEvent):
+    async def on_start_command(self, event: AstrMessageEvent, *args, **kwargs):
         await self._ensure_workers()
         args = self._parse_args(event.message_str, command_name="开始")
         yield event.plain_result(await self._handle_start(event, args))
 
     @filter.command("状态")
-    async def on_status_command(self, event: AstrMessageEvent):
+    async def on_status_command(self, event: AstrMessageEvent, *args, **kwargs):
         await self._ensure_workers()
         yield event.plain_result(self._handle_status(event))
 
     @filter.command("取消")
-    async def on_cancel_command(self, event: AstrMessageEvent):
+    async def on_cancel_command(self, event: AstrMessageEvent, *args, **kwargs):
         await self._ensure_workers()
         args = self._parse_args(event.message_str, command_name="取消")
         yield event.plain_result(self._handle_cancel(event, args))
 
     @filter.command("答题管理")
-    async def on_admin_command(self, event: AstrMessageEvent):
+    async def on_admin_command(self, event: AstrMessageEvent, *args, **kwargs):
         await self._ensure_workers()
         self._cleanup_tasks()
 
